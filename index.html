@@ -1,1 +1,189 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps Example</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAtLyoU4xIXMibu2y5IKUYtWjKB8mYi0ME"></script>
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<h1>เลือกสถานที่</h1>
+<div class="form-group">
+    <label>ใส่ค่าเริ่มต้น (latitude, longitude):</label>
+    <input type="text" class="form-control" id="one" name="one" placeholder="เช่น 13.7563, 100.5018">
+    <button onclick="setStartLocation()">บันทึกตำแหน่งเริ่มต้น</button> <!-- ปุ่มบันทึกตำแหน่งเริ่มต้น -->
+</div>
+
+<h2>เพิ่มสถานที่ใหม่</h2>
+<div class="form-group">
+    <label>ชื่อสถานที่:</label>
+    <input type="text" class="form-control" id="locationName" placeholder="ชื่อสถานที่">
+    <label>ละติจูด:</label>
+    <input type="text" class="form-control" id="locationLat" placeholder="ละติจูด">
+    <label>ลองจิจูด:</label>
+    <input type="text" class="form-control" id="locationLng" placeholder="ลองจิจูด">
+    <button onclick="addLocation()">เพิ่มสถานที่</button> <!-- ปุ่มเพิ่มสถานที่ -->
+</div>
+
+<ul id="locations-list"></ul> <!-- แสดงรายการที่โหลดจาก Local Storage -->
+
+<div id="map"></div>
+
+<script>
+    let map;
+    let directionsService;
+    let directionsRenderer;
+    let startLocation;
+
+    // ฟังก์ชันนี้จะถูกเรียกทุกครั้งที่โหลดหน้า
+    function initMap() {
+        // โหลดค่าจาก Local Storage หรือใช้ค่าดีฟอลต์หากไม่มีค่าเก็บไว้
+        const savedStartLocation = JSON.parse(localStorage.getItem('startLocation'));
+        startLocation = savedStartLocation || { lat: 13.7563, lng: 100.5018 };
+
+        // ตั้งค่าแผนที่
+        map = new google.maps.Map(document.getElementById("map"), {
+            zoom: 14,
+            center: startLocation
+        });
+
+        directionsService = new google.maps.DirectionsService();
+        directionsRenderer = new google.maps.DirectionsRenderer();
+        directionsRenderer.setMap(map);
+
+        // สร้างหมุดที่ตำแหน่งเริ่มต้น
+        new google.maps.Marker({
+            position: startLocation,
+            map: map,
+            title: "จุดเริ่มต้น"
+        });
+
+        // โหลดรายการที่เก็บไว้ใน Local Storage
+        loadLocations();
+
+        // แสดงค่าที่บันทึกไว้ในช่อง input (หากมี)
+        if (savedStartLocation) {
+            document.getElementById('one').value = `${savedStartLocation.lat}, ${savedStartLocation.lng}`;
+        }
+    }
+
+    function setStartLocation() {
+        const input = document.getElementById("one").value;
+        const coords = input.split(",").map(Number);
+
+        if (coords.length === 2) {
+            startLocation = { lat: coords[0], lng: coords[1] };
+            map.setCenter(startLocation);
+
+            directionsRenderer.setMap(null);
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+
+            // สร้างหมุดใหม่ที่ตำแหน่งเริ่มต้น
+            new google.maps.Marker({
+                position: startLocation,
+                map: map,
+                title: "จุดเริ่มต้น"
+            });
+
+            // บันทึกค่าลงใน Local Storage
+            localStorage.setItem('startLocation', JSON.stringify(startLocation));
+        } else {
+            alert("กรุณากรอกค่าที่ถูกต้องในรูปแบบ: latitude, longitude");
+        }
+    }
+
+    function moveToLocation(lat, lng) {
+        const destination = { lat: lat, lng: lng };
+
+        directionsService.route({
+            origin: startLocation,
+            destination: destination,
+            travelMode: google.maps.TravelMode.DRIVING
+        }, (response, status) => {
+            if (status === 'OK') {
+                directionsRenderer.setDirections(response);
+                map.setCenter(startLocation);
+            } else {
+                alert('ไม่สามารถค้นหาเส้นทางได้: ' + status);
+            }
+        });
+    }
+
+    function loadLocations() {
+        const savedLocations = JSON.parse(localStorage.getItem('locations')) || [];
+        const ul = document.getElementById('locations-list');
+        ul.innerHTML = ''; // ล้างรายการก่อนโหลดใหม่
+
+        savedLocations.forEach((location, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+            <a href="#" onclick="moveToLocation(${location.lat}, ${location.lng})">${location.name}</a>
+            <button onclick="deleteLocation(${index})">ลบ</button>
+            <button onclick="copyToClipboard(${location.lat}, ${location.lng})">คัดลอกตำแหน่ง</button>
+        `;
+            ul.appendChild(li);
+        });
+
+        // อัปเดต Local Storage
+        localStorage.setItem('locations', JSON.stringify(savedLocations));
+    }
+
+    function copyToClipboard(lat, lng) {
+        const textToCopy = `${lat}, ${lng}`;
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            alert(`คัดลอก: ${textToCopy} ไปยังคลิปบอร์ดแล้ว!`);
+        }).catch(err => {
+            alert('เกิดข้อผิดพลาดในการคัดลอก');
+            console.error('Error copying to clipboard', err);
+        });
+    }
+
+
+    function addLocation() {
+        const name = document.getElementById('locationName').value;
+        const lat = parseFloat(document.getElementById('locationLat').value);
+        const lng = parseFloat(document.getElementById('locationLng').value);
+
+        if (name && !isNaN(lat) && !isNaN(lng)) {
+            const newLocation = { name: name, lat: lat, lng: lng };
+
+            // ดึงข้อมูลที่บันทึกใน Local Storage
+            const savedLocations = JSON.parse(localStorage.getItem('locations')) || [];
+
+            // เพิ่มสถานที่ใหม่ลงในรายการ
+            savedLocations.push(newLocation);
+
+            // บันทึกลง Local Storage
+            localStorage.setItem('locations', JSON.stringify(savedLocations));
+
+            // โหลดรายการใหม่
+            loadLocations();
+
+            // ล้างค่าฟอร์มหลังจากบันทึก
+            document.getElementById('locationName').value = '';
+            document.getElementById('locationLat').value = '';
+            document.getElementById('locationLng').value = '';
+        } else {
+            alert('กรุณากรอกข้อมูลที่ถูกต้อง');
+        }
+    }
+
+    function deleteLocation(index) {
+        const savedLocations = JSON.parse(localStorage.getItem('locations')) || [];
+        savedLocations.splice(index, 1); // ลบรายการตาม index
+        localStorage.setItem('locations', JSON.stringify(savedLocations)); // บันทึกใหม่
+        loadLocations(); // โหลดรายการใหม่หลังจากลบ
+    }
+
+    window.onload = initMap;
+</script>
+</body>
+</html>
 
